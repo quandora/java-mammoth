@@ -1,7 +1,50 @@
 package org.zwobble.mammoth.internal.conversion;
 
+import static org.zwobble.mammoth.internal.util.Casts.tryCast;
+import static org.zwobble.mammoth.internal.util.Iterables.findIndex;
+import static org.zwobble.mammoth.internal.util.Lists.cons;
+import static org.zwobble.mammoth.internal.util.Lists.eagerConcat;
+import static org.zwobble.mammoth.internal.util.Lists.eagerFlatMap;
+import static org.zwobble.mammoth.internal.util.Lists.eagerMap;
+import static org.zwobble.mammoth.internal.util.Lists.list;
+import static org.zwobble.mammoth.internal.util.Maps.lookup;
+import static org.zwobble.mammoth.internal.util.Maps.map;
+import static org.zwobble.mammoth.internal.util.Maps.mutableMap;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Supplier;
+
 import org.zwobble.mammoth.images.ImageConverter;
-import org.zwobble.mammoth.internal.documents.*;
+import org.zwobble.mammoth.internal.documents.Bookmark;
+import org.zwobble.mammoth.internal.documents.Break;
+import org.zwobble.mammoth.internal.documents.Comment;
+import org.zwobble.mammoth.internal.documents.CommentReference;
+import org.zwobble.mammoth.internal.documents.Document;
+import org.zwobble.mammoth.internal.documents.DocumentElement;
+import org.zwobble.mammoth.internal.documents.DocumentElementVisitor;
+import org.zwobble.mammoth.internal.documents.HasChildren;
+import org.zwobble.mammoth.internal.documents.Hyperlink;
+import org.zwobble.mammoth.internal.documents.Image;
+import org.zwobble.mammoth.internal.documents.Note;
+import org.zwobble.mammoth.internal.documents.NoteReference;
+import org.zwobble.mammoth.internal.documents.NoteType;
+import org.zwobble.mammoth.internal.documents.Paragraph;
+import org.zwobble.mammoth.internal.documents.Run;
+import org.zwobble.mammoth.internal.documents.Tab;
+import org.zwobble.mammoth.internal.documents.Table;
+import org.zwobble.mammoth.internal.documents.TableCell;
+import org.zwobble.mammoth.internal.documents.TableOfContents;
+import org.zwobble.mammoth.internal.documents.TableRow;
+import org.zwobble.mammoth.internal.documents.Text;
+import org.zwobble.mammoth.internal.documents.VerticalAlignment;
 import org.zwobble.mammoth.internal.html.Html;
 import org.zwobble.mammoth.internal.html.HtmlNode;
 import org.zwobble.mammoth.internal.results.InternalResult;
@@ -10,38 +53,26 @@ import org.zwobble.mammoth.internal.styles.StyleMap;
 import org.zwobble.mammoth.internal.util.Lists;
 import org.zwobble.mammoth.internal.util.Maps;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.*;
-import java.util.function.Supplier;
-
-import static org.zwobble.mammoth.internal.util.Casts.tryCast;
-import static org.zwobble.mammoth.internal.util.Iterables.findIndex;
-import static org.zwobble.mammoth.internal.util.Lists.*;
-import static org.zwobble.mammoth.internal.util.Maps.mutableMap;
-import static org.zwobble.mammoth.internal.util.Maps.lookup;
-import static org.zwobble.mammoth.internal.util.Maps.map;
-
 public class DocumentToHtml {
     public static InternalResult<List<HtmlNode>> convertToHtml(Document document, DocumentToHtmlOptions options) {
         DocumentToHtml documentConverter = new DocumentToHtml(options, document.getComments());
         return new InternalResult<>(
-            documentConverter.convertToHtml(document, INITIAL_CONTEXT),
-            documentConverter.warnings);
+                documentConverter.convertToHtml(document, INITIAL_CONTEXT),
+                documentConverter.warnings);
     }
 
     private static List<Note> findNotes(Document document, Iterable<NoteReference> noteReferences) {
         return eagerMap(
-            noteReferences,
-            // TODO: handle missing notes
-            reference -> document.getNotes().findNote(reference.getNoteType(), reference.getNoteId()).get());
+                noteReferences,
+                // TODO: handle missing notes
+                reference -> document.getNotes().findNote(reference.getNoteType(), reference.getNoteId()).get());
     }
 
     public static InternalResult<List<HtmlNode>> convertToHtml(DocumentElement element, DocumentToHtmlOptions options) {
         DocumentToHtml documentConverter = new DocumentToHtml(options, list());
         return new InternalResult<>(
-            documentConverter.convertToHtml(element, INITIAL_CONTEXT),
-            documentConverter.warnings);
+                documentConverter.convertToHtml(element, INITIAL_CONTEXT),
+                documentConverter.warnings);
     }
 
     private static class ReferencedComment {
@@ -62,6 +93,7 @@ public class DocumentToHtml {
     private final List<NoteReference> noteReferences = new ArrayList<>();
     private final List<ReferencedComment> referencedComments = new ArrayList<>();
     private final Set<String> warnings = new HashSet<>();
+    private final String tocClass;
 
     private static final Context INITIAL_CONTEXT = new Context(false);
 
@@ -83,6 +115,7 @@ public class DocumentToHtml {
         this.styleMap = options.styleMap();
         this.imageConverter = options.imageConverter();
         this.comments = Maps.toMapWithKey(comments, Comment::getCommentId);
+        this.tocClass = options.tocClass();
     }
 
     private List<HtmlNode> convertToHtml(Document document, Context context) {
@@ -91,14 +124,14 @@ public class DocumentToHtml {
         List<Note> notes = findNotes(document, noteReferences);
 
         List<HtmlNode> noteNodes = notes.isEmpty()
-            ? list()
-            : list(Html.element("ol", eagerMap(notes, note -> convertToHtml(note, context))));
+                ? list()
+                        : list(Html.element("ol", eagerMap(notes, note -> convertToHtml(note, context))));
 
-        List<HtmlNode> commentNodes = referencedComments.isEmpty()
-            ? list()
-            : list(Html.element("dl", eagerFlatMap(referencedComments, comment -> convertToHtml(comment, context))));
+                List<HtmlNode> commentNodes = referencedComments.isEmpty()
+                        ? list()
+                                : list(Html.element("dl", eagerFlatMap(referencedComments, comment -> convertToHtml(comment, context))));
 
-        return eagerConcat(mainBody, noteNodes, commentNodes);
+                        return eagerConcat(mainBody, noteNodes, commentNodes);
     }
 
     private HtmlNode convertToHtml(Note note, Context context) {
@@ -108,8 +141,8 @@ public class DocumentToHtml {
         // TODO: we probably want this to collapse more eagerly than other collapsible elements
         // -- for instance, any paragraph will probably do, regardless of attributes. (Possible other elements will do too.)
         HtmlNode backLink = Html.collapsibleElement("p", list(
-            Html.text(" "),
-            Html.element("a", map("href", "#" + referenceId), list(Html.text("↑")))));
+                Html.text(" "),
+                Html.element("a", map("href", "#" + referenceId), list(Html.text("↑")))));
         return Html.element("li", map("id", id), eagerConcat(noteBody, list(backLink)));
     }
 
@@ -120,23 +153,23 @@ public class DocumentToHtml {
         // TODO: we probably want this to collapse more eagerly than other collapsible elements
         // -- for instance, any paragraph will probably do, regardless of attributes. (Possible other elements will do too.)
         HtmlNode backLink = Html.collapsibleElement("p", list(
-            Html.text(" "),
-            Html.element("a", map("href", "#" + generateReferenceHtmlId("comment", commentId)), list(Html.text("↑")))));
+                Html.text(" "),
+                Html.element("a", map("href", "#" + generateReferenceHtmlId("comment", commentId)), list(Html.text("↑")))));
 
         return list(
-            Html.element(
-                "dt",
-                map("id", generateReferentHtmlId("comment", commentId)),
-                list(Html.text("Comment " + referencedComment.label))),
-            Html.element("dd",
-                eagerConcat(body, list(backLink))));
+                Html.element(
+                        "dt",
+                        map("id", generateReferentHtmlId("comment", commentId)),
+                        list(Html.text("Comment " + referencedComment.label))),
+                Html.element("dd",
+                        eagerConcat(body, list(backLink))));
     }
 
     private List<HtmlNode> convertToHtml(List<DocumentElement> elements, Context context) {
         return eagerFlatMap(
-            elements,
-            element -> convertToHtml(element, context)
-        );
+                elements,
+                element -> convertToHtml(element, context)
+                );
     }
 
     private List<HtmlNode> convertChildrenToHtml(HasChildren element, Context context) {
@@ -151,12 +184,12 @@ public class DocumentToHtml {
                 return preserveEmptyParagraphs ? cons(Html.FORCE_WRITE, content) : content;
             };
             HtmlPath mapping = styleMap.getParagraphHtmlPath(paragraph)
-                .orElseGet(() -> {
-                    if (paragraph.getStyle().isPresent()) {
-                        warnings.add("Unrecognised paragraph style: " + paragraph.getStyle().get().describe());
-                    }
-                    return HtmlPath.element("p");
-                });
+                    .orElseGet(() -> {
+                        if (paragraph.getStyle().isPresent()) {
+                            warnings.add("Unrecognised paragraph style: " + paragraph.getStyle().get().describe());
+                        }
+                        return HtmlPath.element("p");
+                    });
             return mapping.wrap(children).get();
         }
 
@@ -185,12 +218,12 @@ public class DocumentToHtml {
                 nodes = styleMap.getBold().orElse(HtmlPath.collapsibleElement("strong")).wrap(nodes);
             }
             HtmlPath mapping = styleMap.getRunHtmlPath(run)
-                .orElseGet(() -> {
-                    if (run.getStyle().isPresent()) {
-                        warnings.add("Unrecognised run style: " + run.getStyle().get().describe());
-                    }
-                    return HtmlPath.EMPTY;
-                });
+                    .orElseGet(() -> {
+                        if (run.getStyle().isPresent()) {
+                            warnings.add("Unrecognised run style: " + run.getStyle().get().describe());
+                        }
+                        return HtmlPath.EMPTY;
+                    });
             return mapping.wrap(nodes).get();
         }
 
@@ -211,48 +244,48 @@ public class DocumentToHtml {
         @Override
         public List<HtmlNode> visit(Break breakElement, Context context) {
             HtmlPath mapping = styleMap.getBreakHtmlPath(breakElement)
-                .orElseGet(() -> {
-                    if (breakElement.getType() == Break.Type.LINE) {
-                        return HtmlPath.element("br");
-                    } else {
-                        return HtmlPath.EMPTY;
-                    }
-                });
+                    .orElseGet(() -> {
+                        if (breakElement.getType() == Break.Type.LINE) {
+                            return HtmlPath.element("br");
+                        } else {
+                            return HtmlPath.EMPTY;
+                        }
+                    });
             return mapping.wrap(() -> list()).get();
         }
 
         @Override
         public List<HtmlNode> visit(Table table, Context context) {
             HtmlPath mapping = styleMap.getTableHtmlPath(table)
-                .orElse(HtmlPath.element("table"));
+                    .orElse(HtmlPath.element("table"));
             return mapping.wrap(() -> generateTableChildren(table, context)).get();
         }
 
         private List<HtmlNode> generateTableChildren(Table table, Context context) {
             int bodyIndex = findIndex(table.getChildren(), child -> !isHeader(child))
-                .orElse(table.getChildren().size());
+                    .orElse(table.getChildren().size());
             if (bodyIndex == 0) {
                 return convertToHtml(table.getChildren(), context.isHeader(false));
             } else {
                 List<HtmlNode> headRows = convertToHtml(
-                    table.getChildren().subList(0, bodyIndex),
-                    context.isHeader(true)
-                );
+                        table.getChildren().subList(0, bodyIndex),
+                        context.isHeader(true)
+                        );
                 List<HtmlNode> bodyRows = convertToHtml(
-                    table.getChildren().subList(bodyIndex, table.getChildren().size()),
-                    context.isHeader(false)
-                );
+                        table.getChildren().subList(bodyIndex, table.getChildren().size()),
+                        context.isHeader(false)
+                        );
                 return list(
-                    Html.element("thead", headRows),
-                    Html.element("tbody", bodyRows)
-                );
+                        Html.element("thead", headRows),
+                        Html.element("tbody", bodyRows)
+                        );
             }
         }
 
         private boolean isHeader(DocumentElement child) {
             return tryCast(TableRow.class, child)
-                .map(TableRow::isHeader)
-                .orElse(false);
+                    .map(TableRow::isHeader)
+                    .orElse(false);
         }
 
         @Override
@@ -271,15 +304,15 @@ public class DocumentToHtml {
                 attributes.put("rowspan", Integer.toString(tableCell.getRowspan()));
             }
             return list(Html.element(tagName, attributes,
-                Lists.cons(Html.FORCE_WRITE, convertChildrenToHtml(tableCell, context))));
+                    Lists.cons(Html.FORCE_WRITE, convertChildrenToHtml(tableCell, context))));
         }
 
         @Override
         public List<HtmlNode> visit(Hyperlink hyperlink, Context context) {
             Map<String, String> attributes = mutableMap("href", generateHref(hyperlink));
             hyperlink.getTargetFrame().ifPresent(targetFrame ->
-                attributes.put("target", targetFrame)
-            );
+            attributes.put("target", targetFrame)
+                    );
 
             return list(Html.collapsibleElement("a", attributes, convertChildrenToHtml(hyperlink, context)));
         }
@@ -305,8 +338,8 @@ public class DocumentToHtml {
             String noteAnchor = generateNoteHtmlId(noteReference.getNoteType(), noteReference.getNoteId());
             String noteReferenceAnchor = generateNoteRefHtmlId(noteReference.getNoteType(), noteReference.getNoteId());
             return list(Html.element("sup", list(
-                Html.element("a", map("href", "#" + noteAnchor, "id", noteReferenceAnchor), list(
-                    Html.text("[" + noteReferences.size() + "]"))))));
+                    Html.element("a", map("href", "#" + noteAnchor, "id", noteReferenceAnchor), list(
+                            Html.text("[" + noteReferences.size() + "]"))))));
         }
 
         @Override
@@ -314,17 +347,17 @@ public class DocumentToHtml {
             return styleMap.getCommentReference().orElse(HtmlPath.IGNORE).wrap(() -> {
                 String commentId = commentReference.getCommentId();
                 Comment comment = lookup(comments, commentId)
-                    .orElseThrow(() -> new RuntimeException("Referenced comment could not be found, id: " + commentId));
+                        .orElseThrow(() -> new RuntimeException("Referenced comment could not be found, id: " + commentId));
                 String label = "[" + comment.getAuthorInitials().orElse("") + (referencedComments.size() + 1) + "]";
                 referencedComments.add(new ReferencedComment(label, comment));
 
                 // TODO: Remove duplication with note references
                 return list(Html.element(
-                    "a",
-                    map(
-                        "href", "#" + generateReferentHtmlId("comment", commentId),
-                        "id", generateReferenceHtmlId("comment", commentId)),
-                    list(Html.text(label))));
+                        "a",
+                        map(
+                                "href", "#" + generateReferentHtmlId("comment", commentId),
+                                "id", generateReferenceHtmlId("comment", commentId)),
+                        list(Html.text(label))));
             }).get();
         }
 
@@ -333,32 +366,41 @@ public class DocumentToHtml {
             // TODO: custom image handlers
             // TODO: handle empty content type
             return image.getContentType()
-                .map(contentType -> {
-                    try {
-                        Map<String, String> attributes = new HashMap<>(imageConverter.convert(new org.zwobble.mammoth.images.Image() {
-                            @Override
-                            public Optional<String> getAltText() {
-                                return image.getAltText();
-                            }
+                    .map(contentType -> {
+                        try {
+                            Map<String, String> attributes = new HashMap<>(imageConverter.convert(new org.zwobble.mammoth.images.Image() {
+                                @Override
+                                public Optional<String> getAltText() {
+                                    return image.getAltText();
+                                }
 
-                            @Override
-                            public String getContentType() {
-                                return contentType;
-                            }
+                                @Override
+                                public String getContentType() {
+                                    return contentType;
+                                }
 
-                            @Override
-                            public InputStream getInputStream() throws IOException {
-                                return image.open();
-                            }
-                        }));
-                        image.getAltText().ifPresent(altText -> attributes.put("alt", altText));
-                        return list(Html.element("img", attributes));
-                    } catch (IOException exception) {
-                        warnings.add(exception.getMessage());
-                        return Lists.<HtmlNode>list();
-                    }
-                })
-                .orElse(list());
+                                @Override
+                                public InputStream getInputStream() throws IOException {
+                                    return image.open();
+                                }
+                            }));
+                            image.getAltText().ifPresent(altText -> attributes.put("alt", altText));
+                            return list(Html.element("img", attributes));
+                        } catch (IOException exception) {
+                            warnings.add(exception.getMessage());
+                            return Lists.<HtmlNode>list();
+                        }
+                    })
+                    .orElse(list());
+        }
+
+        @Override
+        public List<HtmlNode> visit(TableOfContents toc, Context context) {
+            Supplier<List<HtmlNode>> children = () -> {
+                List<HtmlNode> content = convertChildrenToHtml(toc, context);
+                return preserveEmptyParagraphs ? cons(Html.FORCE_WRITE, content) : content;
+            };
+            return HtmlPath.element("div", Maps.map("class", tocClass)).wrap(children).get();
         }
     }
 
@@ -384,12 +426,12 @@ public class DocumentToHtml {
 
     private String noteTypeToIdFragment(NoteType noteType) {
         switch (noteType) {
-            case FOOTNOTE:
-                return "footnote";
-            case ENDNOTE:
-                return "endnote";
-            default:
-                throw new UnsupportedOperationException();
+        case FOOTNOTE:
+            return "footnote";
+        case ENDNOTE:
+            return "endnote";
+        default:
+            throw new UnsupportedOperationException();
         }
     }
 

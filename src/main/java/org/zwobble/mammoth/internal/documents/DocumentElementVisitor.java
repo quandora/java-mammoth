@@ -1,7 +1,9 @@
 package org.zwobble.mammoth.internal.documents;
 
 public interface DocumentElementVisitor<T, U> {
+
     T visit(Paragraph paragraph, U context);
+    T visit(TableOfContents toc, U context);
     T visit(Run run, U context);
     T visit(Text text, U context);
 

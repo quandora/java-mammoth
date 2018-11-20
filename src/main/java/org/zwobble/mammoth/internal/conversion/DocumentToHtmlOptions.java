@@ -1,28 +1,28 @@
 package org.zwobble.mammoth.internal.conversion;
 
+import static org.zwobble.mammoth.internal.util.Maps.map;
+
 import org.zwobble.mammoth.images.ImageConverter;
 import org.zwobble.mammoth.internal.styles.DefaultStyles;
 import org.zwobble.mammoth.internal.styles.StyleMap;
 import org.zwobble.mammoth.internal.styles.parsing.StyleMapParser;
 import org.zwobble.mammoth.internal.util.Base64Encoding;
 
-import static org.zwobble.mammoth.internal.util.Maps.map;
-
 public class DocumentToHtmlOptions {
     public static final DocumentToHtmlOptions DEFAULT = new DocumentToHtmlOptions(
-        "",
-        false,
-        StyleMap.EMPTY,
-        StyleMap.EMPTY,
-        false,
-        false,
-        image -> {
-            String base64 = Base64Encoding.streamToBase64(image::getInputStream);
-            String src = "data:" + image.getContentType() + ";base64," + base64;
-            return map("src", src);
-        }
+            "",
+            false,
+            StyleMap.EMPTY,
+            StyleMap.EMPTY,
+            false,
+            false,
+            image -> {
+                String base64 = Base64Encoding.streamToBase64(image::getInputStream);
+                String src = "data:" + image.getContentType() + ";base64," + base64;
+                return map("src", src);
+            }
 
-    );
+            );
 
     private final String idPrefix;
     private final boolean preserveEmptyParagraphs;
@@ -31,16 +31,17 @@ public class DocumentToHtmlOptions {
     private final boolean disableDefaultStyleMap;
     private final boolean disableEmbeddedStyleMap;
     private final ImageConverter.ImgElement imageConverter;
+    private String tocClass = "TOC";
 
     public DocumentToHtmlOptions(
-        String idPrefix,
-        boolean preserveEmptyParagraphs,
-        StyleMap styleMap,
-        StyleMap embeddedStyleMap,
-        boolean disableDefaultStyleMap,
-        boolean disableEmbeddedStyleMap,
-        ImageConverter.ImgElement imageConverter
-    ) {
+            String idPrefix,
+            boolean preserveEmptyParagraphs,
+            StyleMap styleMap,
+            StyleMap embeddedStyleMap,
+            boolean disableDefaultStyleMap,
+            boolean disableEmbeddedStyleMap,
+            ImageConverter.ImgElement imageConverter
+            ) {
         this.idPrefix = idPrefix;
         this.preserveEmptyParagraphs = preserveEmptyParagraphs;
         this.styleMap = styleMap;
@@ -48,6 +49,15 @@ public class DocumentToHtmlOptions {
         this.disableDefaultStyleMap = disableDefaultStyleMap;
         this.disableEmbeddedStyleMap = disableEmbeddedStyleMap;
         this.imageConverter = imageConverter;
+    }
+
+    public DocumentToHtmlOptions tocClass(String tocClass) {
+        this.tocClass = tocClass;
+        return this;
+    }
+
+    public String tocClass() {
+        return tocClass;
     }
 
     public DocumentToHtmlOptions idPrefix(String prefix) {
